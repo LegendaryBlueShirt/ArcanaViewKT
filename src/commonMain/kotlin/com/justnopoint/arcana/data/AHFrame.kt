@@ -65,9 +65,6 @@ class AHFrame(
         if((frameData[3].toInt() and 0x80) == 0x80) {
             flags.add("No Burst")
         }
-        if((frameData[16].toInt() and 0x02) == 0x02) {
-            flags.add("Endurance")
-        }
         flags
     }
 

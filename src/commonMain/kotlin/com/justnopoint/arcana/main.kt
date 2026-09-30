@@ -14,7 +14,6 @@ import kotlinx.coroutines.launch
 import okio.*
 import okio.Path.Companion.toPath
 import platform.posix.exit
-import kotlin.time.Clock
 
 lateinit var pacFile: PacFileSystem
 lateinit var pacFileEf: PacFileSystem
@@ -203,6 +202,12 @@ fun main() {
                         showText(flag, 600, 22 + 82*flagIndex)
                     }
                 }
+            } else if (characterLoaded == LoadStatus.LOADING) {
+                performRender {
+                    loadProgressList.toList().takeLast(20).forEachIndexed { index, string ->
+                        showText(string, 5, 5 + 14*index)
+                    }
+                }
             }
         }
     }
@@ -262,9 +267,12 @@ fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCha
     }
 }
 
+val loadProgressList = mutableListOf<String>()
+
 fun loadCharacter(path: Path, character: AHCharacters = AHCharacters.HEART): Boolean {
     //val path = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\ArcanaHeart3LMSS\\SteamData\\data\\ahdata\\act".toPath()
     currentCharacter = character
+    loadProgressList.clear()
     return try {
         val dataFile = path.div(character.getDataFile())
         val spriteFile = path.div(character.getPacFile())
@@ -274,7 +282,7 @@ fun loadCharacter(path: Path, character: AHCharacters = AHCharacters.HEART): Boo
         actFile = fileSystem.openReadOnly(dataFile).use { source ->
             ActFile(source.source(0))
         }
-        println("Act loaded")
+        loadProgressList.add("Act loaded")
         pacFile = PacFileSystem(spriteFile)
         pacFile.list("/palimg".toPath())
         tblFile = pacFile.openReadOnly(character.getTblFilePath()).use { handle ->
@@ -282,7 +290,7 @@ fun loadCharacter(path: Path, character: AHCharacters = AHCharacters.HEART): Boo
                 TblFile(it)
             }
         }
-        println("Tbl loaded")
+        loadProgressList.add("Tbl loaded")
         try {
             palFile = pacFile.openReadOnly(character.getPalFilePath(0)).use { handle ->
                 handle.source().use {
@@ -297,14 +305,14 @@ fun loadCharacter(path: Path, character: AHCharacters = AHCharacters.HEART): Boo
                 }
             }
         }
-        println("Pal loaded")
+        loadProgressList.add("Pal loaded")
         pacFileEf = PacFileSystem(effectFile)
         tblFileEf = pacFileEf.openReadOnly(character.getEffectTblFilePath()).use { handle ->
             handle.source().use {
                 TblFile(it)
             }
         }
-        println("TblEf loaded")
+        loadProgressList.add("TblEf loaded")
         true
     } catch (e: Exception) {
         false
@@ -312,14 +320,9 @@ fun loadCharacter(path: Path, character: AHCharacters = AHCharacters.HEART): Boo
 }
 
 fun buildEffectSheets(tbldata: TblFile, archive: PacFileSystem, character: AHCharacters): Map<Int, SpriteSheet> {
-    var instant = Clock.System.now()
     return tbldata.getSheetIndices().associateWith { index ->
         archive.openReadOnly(character.getEffectSheet(index)).use { inFile ->
-            val newInstant = Clock.System.now()
-            val total = newInstant - instant
-            instant = newInstant
-            println("Time Taken: ${total.inWholeMilliseconds}")
-            println("Loading ${character.getEffectSheet(index)}")
+            loadProgressList.add("Loading ${character.getEffectSheet(index)}")
             if(index < 320) {
                 val hip = HIPFile(inFile, 0)
                 hip.sheet

@@ -27,7 +27,7 @@ var currentCharacter: AHCharacters = AHCharacters.HEART
 var characterLoaded: LoadStatus = LoadStatus.NOT_LOADED
 
 enum class LoadStatus {
-    NOT_LOADED, LOADING, LOADED
+    NOT_LOADED, LOADING, PARTIAL, LOADED
 }
 
 var currentPath: Path = "/".toPath()
@@ -119,7 +119,7 @@ fun main() {
                 frameIndex = 0
             }
 
-            if(characterLoaded == LoadStatus.LOADED) {
+            if(characterLoaded == LoadStatus.LOADED || characterLoaded == LoadStatus.PARTIAL) {
                 performRender {
                     val anim = actFile.getAnimDef(currentAnim)
                     if(animating) {
@@ -132,18 +132,20 @@ fun main() {
                         actFile.getSprDef(it)
                     }.forEachIndexed { sprindex, sprData ->
                         if(sprData.sprNo >= tblFile.getEntryCount()) {
-                            tblFileEf.getEntry(sprData.sprNo.toInt()-tblFile.getEntryCount())?.let { entry ->
-                                showImage(
-                                    textureHandle = texturesEf[entry.sheet]!!,
-                                    posX = screenX + sprData.axisX,
-                                    posY = screenY - sprData.axisY,
-                                    srcX = entry.axisX,
-                                    srcY = entry.axisY,
-                                    width = entry.width,
-                                    height = entry.height,
-                                    transformations = sprData.transformations,
-                                    renderMode = sprData.renderMode
-                                )
+                            if(characterLoaded == LoadStatus.LOADED) {
+                                tblFileEf.getEntry(sprData.sprNo.toInt() - tblFile.getEntryCount())?.let { entry ->
+                                    showImage(
+                                        textureHandle = texturesEf[entry.sheet]!!,
+                                        posX = screenX + sprData.axisX,
+                                        posY = screenY - sprData.axisY,
+                                        srcX = entry.axisX,
+                                        srcY = entry.axisY,
+                                        width = entry.width,
+                                        height = entry.height,
+                                        transformations = sprData.transformations,
+                                        renderMode = sprData.renderMode
+                                    )
+                                }
                             }
                         } else {
                             tblFile.getEntry(sprData.sprNo.toInt())?.let { entry ->
@@ -201,6 +203,9 @@ fun main() {
                     frame.knownFlags.forEachIndexed { flagIndex, flag ->
                         showText(flag, 600, 22 + 82*flagIndex)
                     }
+                    if(characterLoaded == LoadStatus.PARTIAL) {
+                        showText("Loading Effects...", 500, 564)
+                    }
                 }
             } else if (characterLoaded == LoadStatus.LOADING) {
                 performRender {
@@ -225,7 +230,8 @@ fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCha
     characterLoaded = LoadStatus.LOADING
     disableCharacterMenu()
     job = CoroutineScope(SupervisorJob()).launch {
-        val success = loadCharacter(path, character)
+        currentCharacter = character
+        val success = loadCharacter(path)
         if(!success) {
             cancel()
         }
@@ -242,6 +248,8 @@ fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCha
                     loadRgbaImage(sheet.raster, sheet.width, sheet.height)
                 }
             }
+        characterLoaded = LoadStatus.PARTIAL
+        loadCharacterEffects(path)
         texturesEf =
             buildEffectSheets(tblFileEf, pacFileEf, currentCharacter).mapValues { (_, sheet) ->
                 if(sheet.bytesPerPixel == 1) {
@@ -269,14 +277,12 @@ fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCha
 
 val loadProgressList = mutableListOf<String>()
 
-fun loadCharacter(path: Path, character: AHCharacters = AHCharacters.HEART): Boolean {
+fun loadCharacter(path: Path): Boolean {
     //val path = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\ArcanaHeart3LMSS\\SteamData\\data\\ahdata\\act".toPath()
-    currentCharacter = character
     loadProgressList.clear()
     return try {
-        val dataFile = path.div(character.getDataFile())
-        val spriteFile = path.div(character.getPacFile())
-        val effectFile = path.div(character.getEffectFile())
+        val dataFile = path.div(currentCharacter.getDataFile())
+        val spriteFile = path.div(currentCharacter.getPacFile())
         println(dataFile)
         val fileSystem = FileSystem.SYSTEM
         actFile = fileSystem.openReadOnly(dataFile).use { source ->
@@ -285,14 +291,14 @@ fun loadCharacter(path: Path, character: AHCharacters = AHCharacters.HEART): Boo
         loadProgressList.add("Act loaded")
         pacFile = PacFileSystem(spriteFile)
         pacFile.list("/palimg".toPath())
-        tblFile = pacFile.openReadOnly(character.getTblFilePath()).use { handle ->
+        tblFile = pacFile.openReadOnly(currentCharacter.getTblFilePath()).use { handle ->
             handle.source().use {
                 TblFile(it)
             }
         }
         loadProgressList.add("Tbl loaded")
         try {
-            palFile = pacFile.openReadOnly(character.getPalFilePath(0)).use { handle ->
+            palFile = pacFile.openReadOnly(currentCharacter.getPalFilePath(0)).use { handle ->
                 handle.source().use {
                     PalFile(it)
                 }
@@ -306,17 +312,21 @@ fun loadCharacter(path: Path, character: AHCharacters = AHCharacters.HEART): Boo
             }
         }
         loadProgressList.add("Pal loaded")
-        pacFileEf = PacFileSystem(effectFile)
-        tblFileEf = pacFileEf.openReadOnly(character.getEffectTblFilePath()).use { handle ->
-            handle.source().use {
-                TblFile(it)
-            }
-        }
-        loadProgressList.add("TblEf loaded")
         true
     } catch (e: Exception) {
         false
     }
+}
+
+fun loadCharacterEffects(path: Path) {
+    val effectFile = path.div(currentCharacter.getEffectFile())
+    pacFileEf = PacFileSystem(effectFile)
+    tblFileEf = pacFileEf.openReadOnly(currentCharacter.getEffectTblFilePath()).use { handle ->
+        handle.source().use {
+            TblFile(it)
+        }
+    }
+    loadProgressList.add("TblEf loaded")
 }
 
 fun buildEffectSheets(tbldata: TblFile, archive: PacFileSystem, character: AHCharacters): Map<Int, SpriteSheet> {

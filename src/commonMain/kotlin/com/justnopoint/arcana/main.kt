@@ -4,13 +4,16 @@ import com.justnopoint.arcana.data.*
 import com.justnopoint.arcana.data.AHBox.BoxType
 import com.justnopoint.arcana.util.DecompressDDS
 import com.justnopoint.arcana.util.HIPFile
+import com.justnopoint.arcana.util.Logger
 import com.justnopoint.arcana.util.PacFileSystem
 import com.justnopoint.arcana.util.pk3util
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okio.*
 import okio.Path.Companion.toPath
 import platform.posix.exit
@@ -63,6 +66,7 @@ val boxes = mutableMapOf(
 
 @OptIn(ExperimentalStdlibApi::class)
 fun main() {
+    Logger.init()
     initChooser()
     engineContext("Arcana Heart Frameviewer") {
         var currentAnim = 0
@@ -204,12 +208,12 @@ fun main() {
                         showText(flag, 600, 22 + 82*flagIndex)
                     }
                     if(characterLoaded == LoadStatus.PARTIAL) {
-                        showText("Loading Effects...", 500, 564)
+                        showText(Logger.internalLog.last(), 500, 564)
                     }
                 }
             } else if (characterLoaded == LoadStatus.LOADING) {
                 performRender {
-                    loadProgressList.toList().takeLast(20).forEachIndexed { index, string ->
+                    Logger.internalLog.takeLast(20).forEachIndexed { index, string ->
                         showText(string, 5, 5 + 14*index)
                     }
                 }
@@ -218,6 +222,7 @@ fun main() {
     }
 
     saveChooser()
+    Logger.close()
     exit(0)
 }
 
@@ -230,56 +235,56 @@ fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCha
     characterLoaded = LoadStatus.LOADING
     disableCharacterMenu()
     job = CoroutineScope(SupervisorJob()).launch {
-        currentCharacter = character
-        val success = loadCharacter(path)
-        if(!success) {
-            cancel()
-        }
-        setAnimList(actFile.getValidAnims())
+        withContext(CoroutineExceptionHandler { _, throwable ->
+            Logger.log(throwable.toString())
+            Logger.log(throwable.stackTraceToString())
+        }) {
+            currentCharacter = character
+            var success = loadCharacter(path)
+            if (!success) {
+                cancel()
+            }
+            setAnimList(actFile.getValidAnims())
 
-        textures.forEach { (_, tex) ->
-            clearTexture(tex)
+            textures.forEach { (_, tex) ->
+                clearTexture(tex)
+            }
+            textures =
+                buildSheets(tblFile, pacFile, currentCharacter).mapValues { (_, sheet) ->
+                    if (sheet.bytesPerPixel == 1) {
+                        loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
+                    } else {
+                        loadRgbaImage(sheet.raster, sheet.width, sheet.height)
+                    }
+                }
+            characterLoaded = LoadStatus.PARTIAL
+            success = loadCharacterEffects(path)
+            if (success) {
+                texturesEf =
+                    buildEffectSheets(tblFileEf, pacFileEf, currentCharacter).mapValues { (_, sheet) ->
+                        if (sheet.bytesPerPixel == 1) {
+                            loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
+                        } else {
+                            loadRgbaImage(sheet.raster, sheet.width, sheet.height)
+                        }
+                    }
+                characterLoaded = LoadStatus.LOADED
+            }
         }
-        textures =
-            buildSheets(tblFile, pacFile, currentCharacter).mapValues { (_, sheet) ->
-                if(sheet.bytesPerPixel == 1) {
-                    loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
-                } else {
-                    loadRgbaImage(sheet.raster, sheet.width, sheet.height)
-                }
-            }
-        characterLoaded = LoadStatus.PARTIAL
-        loadCharacterEffects(path)
-        texturesEf =
-            buildEffectSheets(tblFileEf, pacFileEf, currentCharacter).mapValues { (_, sheet) ->
-                if(sheet.bytesPerPixel == 1) {
-                    loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
-                } else {
-                    loadRgbaImage(sheet.raster, sheet.width, sheet.height)
-                }
-            }
     }.apply {
         invokeOnCompletion { e ->
-            characterLoaded = when(e) {
-                null -> {
-                    LoadStatus.LOADED
-                }
-
-                else -> {
-                    println(e.toString())
-                    LoadStatus.NOT_LOADED
-                }
+            if (e != null) {
+                println(e.toString())
+                characterLoaded = LoadStatus.NOT_LOADED
             }
             enableCharacterMenu()
         }
     }
 }
 
-val loadProgressList = mutableListOf<String>()
-
 fun loadCharacter(path: Path): Boolean {
     //val path = "C:\\Program Files (x86)\\Steam\\steamapps\\common\\ArcanaHeart3LMSS\\SteamData\\data\\ahdata\\act".toPath()
-    loadProgressList.clear()
+    Logger.clear()
     return try {
         val dataFile = path.div(currentCharacter.getDataFile())
         val spriteFile = path.div(currentCharacter.getPacFile())
@@ -288,7 +293,7 @@ fun loadCharacter(path: Path): Boolean {
         actFile = fileSystem.openReadOnly(dataFile).use { source ->
             ActFile(source.source(0))
         }
-        loadProgressList.add("Act loaded")
+        Logger.log("Act loaded")
         pacFile = PacFileSystem(spriteFile)
         pacFile.list("/palimg".toPath())
         tblFile = pacFile.openReadOnly(currentCharacter.getTblFilePath()).use { handle ->
@@ -296,7 +301,7 @@ fun loadCharacter(path: Path): Boolean {
                 TblFile(it)
             }
         }
-        loadProgressList.add("Tbl loaded")
+        Logger.log("Tbl loaded")
         try {
             palFile = pacFile.openReadOnly(currentCharacter.getPalFilePath(0)).use { handle ->
                 handle.source().use {
@@ -311,28 +316,37 @@ fun loadCharacter(path: Path): Boolean {
                 }
             }
         }
-        loadProgressList.add("Pal loaded")
+        Logger.log("Pal loaded")
         true
     } catch (e: Exception) {
+        Logger.log(e.toString())
+        Logger.log(e.stackTraceToString())
         false
     }
 }
 
-fun loadCharacterEffects(path: Path) {
-    val effectFile = path.div(currentCharacter.getEffectFile())
-    pacFileEf = PacFileSystem(effectFile)
-    tblFileEf = pacFileEf.openReadOnly(currentCharacter.getEffectTblFilePath()).use { handle ->
-        handle.source().use {
-            TblFile(it)
+fun loadCharacterEffects(path: Path): Boolean {
+    return try {
+        val effectFile = path.div(currentCharacter.getEffectFile())
+        pacFileEf = PacFileSystem(effectFile)
+        tblFileEf = pacFileEf.openReadOnly(currentCharacter.getEffectTblFilePath()).use { handle ->
+            handle.source().use {
+                TblFile(it)
+            }
         }
+        Logger.log("TblEf loaded")
+        true
+    } catch (e: Exception) {
+        Logger.log(e.toString())
+        Logger.log(e.stackTraceToString())
+        false
     }
-    loadProgressList.add("TblEf loaded")
 }
 
 fun buildEffectSheets(tbldata: TblFile, archive: PacFileSystem, character: AHCharacters): Map<Int, SpriteSheet> {
     return tbldata.getSheetIndices().associateWith { index ->
         archive.openReadOnly(character.getEffectSheet(index)).use { inFile ->
-            loadProgressList.add("Loading ${character.getEffectSheet(index)}")
+            Logger.log("Loading ${character.getEffectSheet(index)}")
             if(index < 320) {
                 val hip = HIPFile(inFile, 0)
                 hip.sheet

@@ -27,7 +27,6 @@ enum class AHCharacters(
     YORIKO(displayName = "Yoriko Yasuzumi", index = 8),
     KIRA(displayName = "Kira Daidouji", index = 9),
     FIONA(displayName = "Fiona Mayfield", index = 10),
-    MILDRED(displayName = "Mildred Avallone", index = 11),
     PETRA(displayName = "Petra Johanna Lagerkvist", index = 12),
     ZENIA(displayName = "Zenia Valov", index = 13),
     ANGELIA(displayName = "Angelia Avallone", index = 14),

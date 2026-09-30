@@ -6,6 +6,11 @@ import com.justnopoint.arcana.util.DecompressDDS
 import com.justnopoint.arcana.util.HIPFile
 import com.justnopoint.arcana.util.PacFileSystem
 import com.justnopoint.arcana.util.pk3util
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import okio.*
 import okio.Path.Companion.toPath
 import platform.posix.exit
@@ -92,60 +97,16 @@ fun main() {
         while(!isExiting()) {
             processInput()
             folderSelected()?.let {
-                try {
-                    currentPath = it.toPath()
-                    characterLoaded = LoadStatus.LOADING
-                    if (!loadCharacter(currentPath)) {
-                        characterLoaded = LoadStatus.NOT_LOADED
-                        disableCharacterMenu()
-                    }
-                } catch (e: Exception) {
-                    println(e.message)
-                    println(e.stackTraceToString())
-                    exit(20)
-                }
-            }
-            characterSelected()?.let {
-                try {
-                    val characterSelection = AHCharacters.entries[it]
-                    characterLoaded = LoadStatus.LOADING
-                    if (!loadCharacter(currentPath, characterSelection)) {
-                        characterLoaded = LoadStatus.NOT_LOADED
-                        disableCharacterMenu()
-                    }
-                } catch (e: Exception) {
-                    println(e.message)
-                    println(e.stackTraceToString())
-                    exit(20)
-                }
-            }
-
-            if (characterLoaded == LoadStatus.LOADING) {
-                setAnimList(actFile.getValidAnims())
+                currentPath = it.toPath()
+                beginCharacterLoad(currentPath)
                 currentAnim = 0
                 frameIndex = 0
-
-                textures.forEach { (_, tex) ->
-                    clearTexture(tex)
-                }
-                textures =
-                    buildSheets(tblFile, pacFile, currentCharacter).mapValues { (_, sheet) ->
-                        if(sheet.bytesPerPixel == 1) {
-                            loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
-                        } else {
-                            loadRgbaImage(sheet.raster, sheet.width, sheet.height)
-                        }
-                    }
-                texturesEf =
-                    buildEffectSheets(tblFileEf, pacFileEf, currentCharacter).mapValues { (_, sheet) ->
-                        if(sheet.bytesPerPixel == 1) {
-                            loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
-                        } else {
-                            loadRgbaImage(sheet.raster, sheet.width, sheet.height)
-                        }
-                    }
-                enableCharacterMenu()
-                characterLoaded = LoadStatus.LOADED
+            }
+            characterSelected()?.let {
+                val characterSelection = AHCharacters.entries[it]
+                beginCharacterLoad(currentPath, characterSelection)
+                currentAnim = 0
+                frameIndex = 0
             }
 
             boxtypeSelected()?.let {
@@ -248,6 +209,57 @@ fun main() {
 
     saveChooser()
     exit(0)
+}
+
+private var job: Job? = null
+
+fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCharacters.HEART) {
+    if (job?.isActive == true) {
+        return
+    }
+    characterLoaded = LoadStatus.LOADING
+    disableCharacterMenu()
+    job = CoroutineScope(SupervisorJob()).launch {
+        val success = loadCharacter(path, character)
+        if(!success) {
+            cancel()
+        }
+        setAnimList(actFile.getValidAnims())
+
+        textures.forEach { (_, tex) ->
+            clearTexture(tex)
+        }
+        textures =
+            buildSheets(tblFile, pacFile, currentCharacter).mapValues { (_, sheet) ->
+                if(sheet.bytesPerPixel == 1) {
+                    loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
+                } else {
+                    loadRgbaImage(sheet.raster, sheet.width, sheet.height)
+                }
+            }
+        texturesEf =
+            buildEffectSheets(tblFileEf, pacFileEf, currentCharacter).mapValues { (_, sheet) ->
+                if(sheet.bytesPerPixel == 1) {
+                    loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
+                } else {
+                    loadRgbaImage(sheet.raster, sheet.width, sheet.height)
+                }
+            }
+    }.apply {
+        invokeOnCompletion { e ->
+            characterLoaded = when(e) {
+                null -> {
+                    LoadStatus.LOADED
+                }
+
+                else -> {
+                    println(e.toString())
+                    LoadStatus.NOT_LOADED
+                }
+            }
+            enableCharacterMenu()
+        }
+    }
 }
 
 fun loadCharacter(path: Path, character: AHCharacters = AHCharacters.HEART): Boolean {

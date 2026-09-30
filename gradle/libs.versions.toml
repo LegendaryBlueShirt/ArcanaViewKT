@@ -2,12 +2,14 @@
 kotlin = "2.3.20"
 okio = "3.18.2"
 json-serialization = "1.11.0"
+coroutines = "1.11.0"
 
 [libraries]
 okio-bom = { group = "com.squareup.okio", name = "okio-bom", version.ref = "okio" }
 okio = { group = "com.squareup.okio", name = "okio" }
 serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "json-serialization" }
 serialization-json-okio = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json-okio", version.ref = "json-serialization" }
+coroutines = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 
 [plugins]
 kotlin-mpp = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

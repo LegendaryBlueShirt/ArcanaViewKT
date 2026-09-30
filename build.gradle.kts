@@ -64,6 +64,7 @@ kotlin {
                 implementation(libs.okio)
                 implementation(libs.serialization.json)
                 implementation(libs.serialization.json.okio)
+                implementation(libs.coroutines)
             }
         }
     }

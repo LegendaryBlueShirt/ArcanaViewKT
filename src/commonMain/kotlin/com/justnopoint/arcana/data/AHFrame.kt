@@ -17,7 +17,7 @@ class AHFrame(
 
     fun getProjectileCoords(): String {
         val x = frameData[30].toUByte().toInt() or (frameData[31].toUByte().toInt() shl 8)
-        val y = frameData2[0].toUByte().toInt() or (frameData[1].toUByte().toInt() shl 8)
+        val y = frameData2[0].toUByte().toInt() or (frameData2[1].toUByte().toInt() shl 8)
         return "$x, $y"
     }
 

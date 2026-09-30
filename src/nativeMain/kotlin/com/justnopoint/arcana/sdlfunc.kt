@@ -20,7 +20,6 @@ import kotlin.time.times
 private val millisPerFrame = (1000.0/60).milliseconds
 val chooserOptions = MemScope().alloc<_browseinfoW>()
 var lastPath = ""
-private val input = MemScope().allocArray<INPUT>(2)
 
 object Context: EngineContext, RenderContext {
     private lateinit var window: CPointer<SDL_Window>
@@ -108,9 +107,6 @@ object Context: EngineContext, RenderContext {
                                     }
                                 }
                             }
-                        }
-                        WM_MOUSEWHEEL -> {
-
                         }
                     }
                 }

@@ -7,6 +7,8 @@ import com.justnopoint.arcana.util.HIPFile
 import com.justnopoint.arcana.util.Logger
 import com.justnopoint.arcana.util.PacFileSystem
 import com.justnopoint.arcana.util.pk3util
+import kotlinx.cli.ArgParser
+import kotlinx.cli.ArgType
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -65,8 +67,11 @@ val boxes = mutableMapOf(
 )
 
 @OptIn(ExperimentalStdlibApi::class)
-fun main() {
-    Logger.init()
+fun main(args: Array<String>) {
+    val parser = ArgParser("Arcana Viewer")
+    val verbose by parser.option(ArgType.Boolean, shortName = "v", description = "verbose mode")
+    parser.parse(args)
+    Logger.init(verbose == true)
     initChooser()
     engineContext("Arcana Heart Frameviewer") {
         var currentAnim = 0
@@ -263,18 +268,23 @@ fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCha
                 texturesEf =
                     buildEffectSheets(tblFileEf, pacFileEf, currentCharacter).mapValues { (_, sheet) ->
                         if (sheet.bytesPerPixel == 1) {
+                            Logger.logVerbose("Create indexed effect sheet ${sheet.width}x${sheet.height}")
                             loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
                         } else {
+                            Logger.logVerbose("Create rgba effect sheet ${sheet.width}x${sheet.height}")
                             loadRgbaImage(sheet.raster, sheet.width, sheet.height)
                         }
                     }
+                Logger.log("Character load complete")
                 characterLoaded = LoadStatus.LOADED
             }
         }
     }.apply {
         invokeOnCompletion { e ->
             if (e != null) {
-                println(e.toString())
+                Logger.log(e.toString())
+                Logger.log(e.stackTraceToString())
+                Logger.log("Character load failed")
                 characterLoaded = LoadStatus.NOT_LOADED
             }
             enableCharacterMenu()
@@ -288,7 +298,7 @@ fun loadCharacter(path: Path): Boolean {
     return try {
         val dataFile = path.div(currentCharacter.getDataFile())
         val spriteFile = path.div(currentCharacter.getPacFile())
-        println(dataFile)
+        Logger.logVerbose(dataFile.toString())
         val fileSystem = FileSystem.SYSTEM
         actFile = fileSystem.openReadOnly(dataFile).use { source ->
             ActFile(source.source(0))

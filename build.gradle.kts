@@ -21,6 +21,9 @@ kotlin {
                     "-L${nativelibs}\\bin", "-L${project.projectDir}\\native\\lib",
                     "-lmingw32", "-lSDL2main", "-lSDL2_ttf", "-lSDL2", "-lpng", "-lz",
                     "-mwindows")
+                runTaskProvider?.configure {
+                    args("-v")
+                }
             }
             executable("pk3util") {
                 entryPoint = "com.justnopoint.arcana.util.pk3util"
@@ -65,6 +68,7 @@ kotlin {
                 implementation(libs.serialization.json)
                 implementation(libs.serialization.json.okio)
                 implementation(libs.coroutines)
+                implementation(libs.cli)
             }
         }
     }

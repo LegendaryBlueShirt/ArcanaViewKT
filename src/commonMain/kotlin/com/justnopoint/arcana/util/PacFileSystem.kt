@@ -25,15 +25,15 @@ class PacFileSystem(private val path: Path): FileSystem() {
                 }
             }
             var instant = Clock.System.now()
-            println("Decrypted in ${(instant - currentInstant).inWholeMilliseconds} ms")
+            Logger.logVerbose("Decrypted in ${(instant - currentInstant).inWholeMilliseconds} ms")
             currentInstant = instant
             data = dataBuffer.peek().readByteArray(dataBuffer.size)
             instant = Clock.System.now()
-            println("Read in ${(instant - currentInstant).inWholeMilliseconds} ms")
+            Logger.logVerbose("Read in ${(instant - currentInstant).inWholeMilliseconds} ms")
             currentInstant = instant
             files.addAll(readFileList(dataBuffer.peek(), DELIM, 0L, dataBuffer.size))
             instant = Clock.System.now()
-            println("Parsed in ${(instant - currentInstant).inWholeMilliseconds} ms")
+            Logger.logVerbose("Parsed in ${(instant - currentInstant).inWholeMilliseconds} ms")
             currentInstant = instant
             var archive = files.firstOrNull { it.name.endsWith(SUFFIX) }
             while (archive != null) {
@@ -49,7 +49,7 @@ class PacFileSystem(private val path: Path): FileSystem() {
                 archive = files.firstOrNull { it.name.endsWith(SUFFIX) }
             }
             instant = Clock.System.now()
-            println("Recursive archive parsed in ${(instant - currentInstant).inWholeMilliseconds} ms")
+            Logger.logVerbose("Recursive archive parsed in ${(instant - currentInstant).inWholeMilliseconds} ms")
             currentInstant = instant
         }
     }
@@ -129,7 +129,7 @@ class PacFileSystem(private val path: Path): FileSystem() {
     }
 
     override fun list(dir: Path): List<Path> {
-        println("Get list for $dir")
+        Logger.logVerbose("Get list for $dir")
         val segments = dir.segments
         val list = files.map { it.name }.asSequence().filter { it.startsWith(dir.toString()) }
             .map { it.toPath() }
@@ -139,7 +139,7 @@ class PacFileSystem(private val path: Path): FileSystem() {
             .distinct()
             .map { dir.div(it) }
             .toList()
-        println(list.joinToString())
+        Logger.logVerbose(list.joinToString())
         return list
     }
 

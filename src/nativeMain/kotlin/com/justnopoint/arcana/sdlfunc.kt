@@ -5,6 +5,7 @@ import cnames.structs.SDL_Renderer
 import cnames.structs.SDL_Texture
 import cnames.structs.SDL_Window
 import com.justnopoint.arcana.data.AHBox
+import com.justnopoint.arcana.util.Logger
 import kotlinx.cinterop.*
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -388,9 +389,9 @@ private fun registerMousewheelHook() {
     )
 
     if (mouseHook == null) {
-        println("Failed to install global mouse hook. Error: ${GetLastError()}")
+        Logger.log("Failed to install global mouse hook. Error: ${GetLastError()}")
     } else {
-        println("Global Mouse Hook successfully active!")
+        Logger.logVerbose("Global Mouse Hook successfully active!")
     }
 }
 
@@ -398,7 +399,7 @@ fun unregisterGlobalMouseWheelHook() {
     mouseHook?.let {
         UnhookWindowsHookEx(it)
         mouseHook = null
-        println("Global Mouse Hook unregistered safely.")
+        Logger.logVerbose("Global Mouse Hook unregistered safely.")
     }
 }
 

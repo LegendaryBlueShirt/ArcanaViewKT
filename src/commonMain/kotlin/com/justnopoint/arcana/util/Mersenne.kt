@@ -16,7 +16,7 @@ class Mersenne(filename: String) {
     companion object {
         private const val SZ = 624
 
-        fun decrypt(filename: String, encrypted: Source): Buffer {
+        fun decrypt(filename: String, encrypted: Source): ByteArray {
             val mersenne = Mersenne(filename)
             val output = Buffer()
 
@@ -32,7 +32,7 @@ class Mersenne(filename: String) {
             }
             input.close()
 
-            return output
+            return output.readByteArray()
         }
 
         fun getEncrypter(filename: String): Mersenne {

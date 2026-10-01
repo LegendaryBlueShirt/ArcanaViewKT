@@ -2,6 +2,7 @@ package com.justnopoint.arcana.util
 
 import okio.*
 import okio.Path.Companion.toPath
+import kotlin.experimental.ExperimentalNativeApi
 import kotlin.time.Clock
 
 class PacFileSystem(private val path: Path): FileSystem() {
@@ -17,33 +18,27 @@ class PacFileSystem(private val path: Path): FileSystem() {
     init {
         var currentInstant = Clock.System.now()
         SYSTEM.openReadOnly(path).use { handle ->
-            val dataBuffer = if (checkEncrypted(handle.source())) {
+            data = if (checkEncrypted(handle.source())) {
                 Mersenne.decrypt(path.name.uppercase(), handle.source())
             } else {
-                Buffer().also {
-                    handle.source().buffer().readAll(it)
-                }
+                handle.source().buffer().readByteArray()
             }
             var instant = Clock.System.now()
             Logger.logVerbose("Decrypted in ${(instant - currentInstant).inWholeMilliseconds} ms")
             currentInstant = instant
-            data = dataBuffer.peek().readByteArray(dataBuffer.size)
-            instant = Clock.System.now()
-            Logger.logVerbose("Read in ${(instant - currentInstant).inWholeMilliseconds} ms")
-            currentInstant = instant
-            files.addAll(readFileList(dataBuffer.peek(), DELIM, 0L, dataBuffer.size))
+            files.addAll(readFileList(data, DELIM, 0, data.size))
             instant = Clock.System.now()
             Logger.logVerbose("Parsed in ${(instant - currentInstant).inWholeMilliseconds} ms")
             currentInstant = instant
             var archive = files.firstOrNull { it.name.endsWith(SUFFIX) }
             while (archive != null) {
                 val base = archive.name.substring(0, archive.name.length - SUFFIX.length)
-                val contents = readFileList(dataBuffer.peek().apply { skip(archive.offset) }, base+DELIM, archive.offset, archive.size)
+                val contents = readFileList(data, base+DELIM, archive.offset, archive.size)
                 files.remove(archive)
                 if(contents.isNotEmpty()) {
                     files.addAll(contents)
                 } else {
-                    println("Add empty folder $base")
+                    Logger.logVerbose("Add empty folder $base")
                     files.add(PacFile(base, -1, -2, -1))
                 }
                 archive = files.firstOrNull { it.name.endsWith(SUFFIX) }
@@ -63,38 +58,85 @@ class PacFileSystem(private val path: Path): FileSystem() {
         return false
     }
 
-    private fun readFileList(source: Source,
+    @OptIn(ExperimentalNativeApi::class)
+    private fun readFileList(source: ByteArray,
                              pathPrefix: String,
-                             fOffset: Long = 0L,
-                             fSize: Long): List<PacFile> {
-        source.buffer().use { buffer ->
-            val header = buffer.readByteArray(4).decodeToString()
+                             fOffset: Int = 0,
+                             fSize: Int): List<PacFile> {
+        val buffer = ByteArray(4)
+        try {
+            source.copyInto(buffer, 0, fOffset, fOffset + 4)
+        } catch (e: Exception) {
+            Logger.log(e.message ?: e.toString())
+            throw e
+        }
+        try {
+            val header = buffer.decodeToString()
             if (header != MAGIC) {
                 throw IllegalArgumentException("Unexpected header! $header")
             }
-            val startOffset = buffer.readIntLe().toLong()
-            val size = buffer.readIntLe().toLong()
-            if (size != fSize) {
-                throw IllegalArgumentException("Unexpected size value, possibly wrong endian?")
-            }
-            val nFiles = buffer.readIntLe()
-            val unk = buffer.readIntLe()
-            val nSize = buffer.readIntLe().toLong()
-            buffer.skip(8)
-            val fillerSize = 16 - ((nSize + 12) % 16)
+        } catch (e: Exception) {
+            Logger.log(e.message ?: e.toString())
+            throw e
+        }
+        val startOffset = source.getIntAt(fOffset+4)
+        val size = source.getIntAt(fOffset+8)
+        if (size != fSize) {
+            Logger.log("Unexpected size value, possibly wrong endian?")
+            throw IllegalArgumentException("Unexpected size value, possibly wrong endian?")
+        }
+        val nFiles = source.getIntAt(fOffset+12)
+        //val unk = buffer.readIntLe()
+        val nSize = source.getIntAt(fOffset+20)
+        val stringBuffer = ByteArray(nSize)
+        //buffer.skip(8)
+        val fillerSize = 16 - ((nSize + 12) % 16)
 
-            return (0 until nFiles).map {
-                val name = pathPrefix + buffer.readByteArray(nSize).decodeToString().trim{it <= ' '}
-                val filenum = buffer.readIntLe()
-                val offset = buffer.readIntLe() + startOffset + fOffset
-                val fileSize = buffer.readIntLe().toLong()
-                buffer.skip(fillerSize)
-                PacFile(name = name, filenum = filenum, offset = offset, size = fileSize)
-            }
+        var position = fOffset+32
+        return (0 until nFiles).map {
+            source.copyInto(stringBuffer, 0, position, position+nSize)
+            position += nSize
+            val name = pathPrefix + stringBuffer.decodeToString().trim{it <= ' '}
+            val filenum = source.getIntAt(position)
+            val offset = source.getIntAt(position+4) + startOffset + fOffset
+            val fileSize = source.getIntAt(position+8)
+            position += fillerSize + 12
+            PacFile(name = name, filenum = filenum, offset = offset, size = fileSize)
         }
     }
 
-    data class PacFile(val name: String, val filenum: Int, val offset: Long, val size: Long)
+//    private fun readFileList(source: Source,
+//                             pathPrefix: String,
+//                             fOffset: Long = 0L,
+//                             fSize: Long): List<PacFile> {
+//        source.buffer().use { buffer ->
+//            val header = buffer.readByteArray(4).decodeToString()
+//            if (header != MAGIC) {
+//                throw IllegalArgumentException("Unexpected header! $header")
+//            }
+//            val startOffset = buffer.readIntLe().toLong()
+//            val size = buffer.readIntLe().toLong()
+//            if (size != fSize) {
+//                throw IllegalArgumentException("Unexpected size value, possibly wrong endian?")
+//            }
+//            val nFiles = buffer.readIntLe()
+//            val unk = buffer.readIntLe()
+//            val nSize = buffer.readIntLe().toLong()
+//            buffer.skip(8)
+//            val fillerSize = 16 - ((nSize + 12) % 16)
+//
+//            return (0 until nFiles).map {
+//                val name = pathPrefix + buffer.readByteArray(nSize).decodeToString().trim{it <= ' '}
+//                val filenum = buffer.readIntLe()
+//                val offset = buffer.readIntLe() + startOffset + fOffset
+//                val fileSize = buffer.readIntLe().toLong()
+//                buffer.skip(fillerSize)
+//                PacFile(name = name, filenum = filenum, offset = offset, size = fileSize)
+//            }
+//        }
+//    }
+
+    data class PacFile(val name: String, val filenum: Int, val offset: Int, val size: Int)
 
     override fun appendingSink(file: Path, mustExist: Boolean): Sink {
         TODO("Not yet implemented")
@@ -151,12 +193,12 @@ class PacFileSystem(private val path: Path): FileSystem() {
         val fileMatch = files.firstOrNull { it.name == path.toString() }
         return if(fileMatch != null) {
             when (fileMatch.offset) {
-                -2L -> {
+                -2 -> {
                     FileMetadata(
                         isDirectory = true
                     )
                 }
-                -1L -> {
+                -1 -> {
                     FileMetadata(
                         isRegularFile = false,
                         isDirectory = false
@@ -165,7 +207,7 @@ class PacFileSystem(private val path: Path): FileSystem() {
                 else -> {
                     FileMetadata(
                         isRegularFile = true,
-                        size = fileMatch.size
+                        size = fileMatch.size.toLong()
                     )
                 }
             }
@@ -188,7 +230,7 @@ class PacFileSystem(private val path: Path): FileSystem() {
             }
 
             override fun protectedRead(fileOffset: Long, array: ByteArray, arrayOffset: Int, byteCount: Int): Int {
-                if(fileOffset == mem.size)
+                if(fileOffset == mem.size.toLong())
                     return -1
                 var bytesToRead = byteCount
                 if((mem.size - fileOffset) < byteCount) {
@@ -208,7 +250,7 @@ class PacFileSystem(private val path: Path): FileSystem() {
                 TODO("Not yet implemented")
             }
 
-            override fun protectedSize() = mem.size
+            override fun protectedSize() = mem.size.toLong()
 
             override fun protectedWrite(fileOffset: Long, array: ByteArray, arrayOffset: Int, byteCount: Int) {
                 TODO("Not yet implemented")
@@ -220,7 +262,7 @@ class PacFileSystem(private val path: Path): FileSystem() {
     override fun source(file: Path): Source {
         val mem = files.firstOrNull { it.name == file.toString() }!!
         val outBuffer = Buffer()
-        outBuffer.write(data, mem.offset.toInt(), mem.size.toInt())
+        outBuffer.write(data, mem.offset, mem.size)
         outBuffer.flush()
         //data.copyTo(outBuffer, mem.offset, mem.size)
         return outBuffer.peek()

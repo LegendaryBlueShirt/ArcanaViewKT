@@ -11,14 +11,15 @@ import kotlinx.cli.ArgParser
 import kotlinx.cli.ArgType
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import okio.*
 import okio.Path.Companion.toPath
 import platform.posix.exit
+import kotlin.experimental.ExperimentalNativeApi
 
 lateinit var pacFile: PacFileSystem
 lateinit var pacFileEf: PacFileSystem
@@ -66,12 +67,22 @@ val boxes = mutableMapOf(
     BoxType.OTHER to true,
 )
 
-@OptIn(ExperimentalStdlibApi::class)
+val loadingScope = CoroutineScope(Dispatchers.Default + SupervisorJob() + CoroutineExceptionHandler { _, throwable ->
+    Logger.log(throwable.message ?: "Unknown error")
+    Logger.log(throwable.stackTraceToString())
+})
+
+@OptIn(ExperimentalStdlibApi::class, ExperimentalNativeApi::class)
 fun main(args: Array<String>) {
     val parser = ArgParser("Arcana Viewer")
     val verbose by parser.option(ArgType.Boolean, shortName = "v", description = "verbose mode")
     parser.parse(args)
     Logger.init(verbose == true)
+//    setUnhandledExceptionHook { throwable ->
+//        Logger.log("Uncaught exception - ${throwable.message}")
+//        Logger.close()
+//        terminateWithUnhandledException(throwable)
+//    }
     initChooser()
     engineContext("Arcana Heart Frameviewer") {
         var currentAnim = 0
@@ -239,45 +250,47 @@ fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCha
     }
     characterLoaded = LoadStatus.LOADING
     disableCharacterMenu()
-    job = CoroutineScope(SupervisorJob()).launch {
-        withContext(CoroutineExceptionHandler { _, throwable ->
-            Logger.log(throwable.toString())
-            Logger.log(throwable.stackTraceToString())
-        }) {
-            currentCharacter = character
-            var success = loadCharacter(path)
-            if (!success) {
-                cancel()
-            }
-            setAnimList(actFile.getValidAnims())
+    job = loadingScope.launch {
+        currentCharacter = character
+        var success = loadCharacter(path)
+        if (!success) {
+            cancel()
+        }
+        setAnimList(actFile.getValidAnims())
 
-            textures.forEach { (_, tex) ->
+        Logger.logVerbose("Clearing existing textures")
+        textures.forEach { (_, tex) ->
+            clearTexture(tex)
+        }
+        textures =
+            buildSheets(tblFile, pacFile, currentCharacter).mapValues { (_, sheet) ->
+                if (sheet.bytesPerPixel == 1) {
+                    Logger.logVerbose("Create indexed effect sheet ${sheet.width}x${sheet.height}")
+                    loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
+                } else {
+                    Logger.logVerbose("Create rgba effect sheet ${sheet.width}x${sheet.height}")
+                    loadRgbaImage(sheet.raster, sheet.width, sheet.height)
+                }
+            }
+        characterLoaded = LoadStatus.PARTIAL
+        success = loadCharacterEffects(path)
+        if (success) {
+            Logger.logVerbose("Clearing existing effect textures")
+            texturesEf.forEach { (_, tex) ->
                 clearTexture(tex)
             }
-            textures =
-                buildSheets(tblFile, pacFile, currentCharacter).mapValues { (_, sheet) ->
+            texturesEf =
+                buildEffectSheets(tblFileEf, pacFileEf, currentCharacter).mapValues { (_, sheet) ->
                     if (sheet.bytesPerPixel == 1) {
+                        Logger.logVerbose("Create indexed effect sheet ${sheet.width}x${sheet.height}")
                         loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
                     } else {
+                        Logger.logVerbose("Create rgba effect sheet ${sheet.width}x${sheet.height}")
                         loadRgbaImage(sheet.raster, sheet.width, sheet.height)
                     }
                 }
-            characterLoaded = LoadStatus.PARTIAL
-            success = loadCharacterEffects(path)
-            if (success) {
-                texturesEf =
-                    buildEffectSheets(tblFileEf, pacFileEf, currentCharacter).mapValues { (_, sheet) ->
-                        if (sheet.bytesPerPixel == 1) {
-                            Logger.logVerbose("Create indexed effect sheet ${sheet.width}x${sheet.height}")
-                            loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
-                        } else {
-                            Logger.logVerbose("Create rgba effect sheet ${sheet.width}x${sheet.height}")
-                            loadRgbaImage(sheet.raster, sheet.width, sheet.height)
-                        }
-                    }
-                Logger.log("Character load complete")
-                characterLoaded = LoadStatus.LOADED
-            }
+            Logger.log("Character load complete")
+            characterLoaded = LoadStatus.LOADED
         }
     }.apply {
         invokeOnCompletion { e ->
@@ -370,10 +383,12 @@ fun buildEffectSheets(tbldata: TblFile, archive: PacFileSystem, character: AHCha
 }
 
 fun buildSheets(tbldata: TblFile, archive: PacFileSystem, character: AHCharacters): Map<Int, SpriteSheet> {
+    Logger.logVerbose("Creating empty sheets")
     val sheets = tbldata.getSheetIndices().associateWith { _ ->
         SpriteSheet(1024, 1024, 1)
     }
 
+    Logger.logVerbose("Populating sheets")
     tbldata.sheetData.forEachIndexed { index, entry ->
         archive.openReadOnly(character.getSpriteFile(index)).use { inFile ->
             HIPFile(inFile, 0, sheets[entry.sheet]!!, entry.axisX, entry.axisY)

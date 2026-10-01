@@ -7,9 +7,7 @@ import okio.buffer
 
 object Logger {
     private var verbose = false
-    private val _internalLog = mutableListOf<String>()
-    val internalLog: List<String>
-        get() = _internalLog.toList()
+    var internalLog = emptyList<String>()
     private lateinit var logFileHandle: BufferedSink
 
     fun init(verbose: Boolean = false) {
@@ -18,7 +16,7 @@ object Logger {
     }
 
     fun clear() {
-        _internalLog.clear()
+        internalLog = emptyList()
     }
 
     fun logVerbose(message: String) {
@@ -28,7 +26,8 @@ object Logger {
     }
 
     fun log(message: String) {
-        _internalLog.add(message)
+        internalLog += message
+        println(message)
         logFileHandle.writeUtf8(message)
         logFileHandle.writeUtf8("\n")
         logFileHandle.flush()

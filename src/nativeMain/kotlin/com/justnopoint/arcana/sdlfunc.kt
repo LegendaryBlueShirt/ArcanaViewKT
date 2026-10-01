@@ -122,7 +122,15 @@ object Context: EngineContext, RenderContext {
 
     override fun loadIndexedImage(raster: ByteArray, palette: UByteArray, width: Int, height: Int): TextureInstance = memScoped {
         val newSurface = SDL_CreateRGBSurface(0u, width, height, 8, 0u, 0u, 0u, 0u)
+        if (newSurface == null) {
+            SDL_GetError()?.toKString()?.let {
+                Logger.log(it)
+            }
+        } else {
+            Logger.logVerbose("Created RGB surface")
+        }
         val paletteBuffer = allocArray<SDL_Color>(256)
+        Logger.logVerbose("Allocated palette buffer")
         //palette.toCValues().place(interpretCPointer(paletteBuffer.rawValue)!!)
         for(n in 0 until 256) {
             paletteBuffer[n].r = palette[n*4+2]
@@ -130,16 +138,37 @@ object Context: EngineContext, RenderContext {
             paletteBuffer[n].b = palette[n*4+0]
             paletteBuffer[n].a = palette[n*4+3]
         }
+        Logger.logVerbose("Transferred color values")
         val format = newSurface?.pointed?.format
         val palette = format?.pointed?.palette
-        SDL_SetPaletteColors(palette, paletteBuffer, 0, 256)
+        var error = SDL_SetPaletteColors(palette, paletteBuffer, 0, 256)
+        if (error != 0) {
+            SDL_GetError()?.toKString()?.let {
+                Logger.log(it)
+            }
+        } else {
+            Logger.logVerbose("Palette applied to new surface")
+        }
         SDL_memcpy(newSurface?.pointed?.pixels, raster.refTo(0), raster.size.toULong())
-        SDL_SetColorKey(newSurface, SDL_TRUE.toInt(), 0u)
+        Logger.logVerbose("Pixel data copied to new surface")
+        error = SDL_SetColorKey(newSurface, SDL_TRUE.toInt(), 0u)
+        if (error != 0) {
+            SDL_GetError()?.toKString()?.let {
+                Logger.log(it)
+            }
+        } else {
+            Logger.logVerbose("Color key set")
+        }
         return TextureInstance(surfaceToTexture(newSurface))
     }
 
     override fun loadRgbaImage(raster: ByteArray, width: Int, height: Int): TextureInstance {
         val newSurface = SDL_CreateRGBSurface(0u, width, height, 32, 0xFFu, 0xFF00u, 0xFF0000u, 0xFF000000u)
+        if (newSurface == null) {
+            SDL_GetError()?.toKString()?.let {
+                Logger.log(it)
+            }
+        }
         SDL_memcpy(newSurface?.pointed?.pixels, raster.refTo(0), raster.size.toULong())
         return TextureInstance(surfaceToTexture(newSurface))
     }
@@ -148,6 +177,9 @@ object Context: EngineContext, RenderContext {
         val tex = SDL_CreateTextureFromSurface(renderer, surface)
         SDL_FreeSurface(surface)
         if (tex == null) {
+            SDL_GetError()?.toKString()?.let {
+                Logger.logVerbose(it)
+            }
             return -1
         }
         textures[texCounter++] = tex

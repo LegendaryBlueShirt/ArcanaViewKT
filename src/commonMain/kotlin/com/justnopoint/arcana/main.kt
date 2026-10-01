@@ -263,13 +263,13 @@ fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCha
             clearTexture(tex)
         }
         textures =
-            buildSheets(tblFile, pacFile, currentCharacter).mapValues { (_, sheet) ->
-                if (sheet.bytesPerPixel == 1) {
-                    Logger.logVerbose("Create indexed effect sheet ${sheet.width}x${sheet.height}")
-                    loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
-                } else {
-                    Logger.logVerbose("Create rgba effect sheet ${sheet.width}x${sheet.height}")
-                    loadRgbaImage(sheet.raster, sheet.width, sheet.height)
+            if (currentCharacter.isArcana) {
+                buildArcanaSheets(tblFile, pacFile, currentCharacter).mapValues { (_, sheet) ->
+                    sheetToTexture(sheet)
+                }
+            } else {
+                buildSheets(tblFile, pacFile, currentCharacter).mapValues { (_, sheet) ->
+                    sheetToTexture(sheet)
                 }
             }
         characterLoaded = LoadStatus.PARTIAL
@@ -281,13 +281,7 @@ fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCha
             }
             texturesEf =
                 buildEffectSheets(tblFileEf, pacFileEf, currentCharacter).mapValues { (_, sheet) ->
-                    if (sheet.bytesPerPixel == 1) {
-                        Logger.logVerbose("Create indexed effect sheet ${sheet.width}x${sheet.height}")
-                        loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
-                    } else {
-                        Logger.logVerbose("Create rgba effect sheet ${sheet.width}x${sheet.height}")
-                        loadRgbaImage(sheet.raster, sheet.width, sheet.height)
-                    }
+                    sheetToTexture(sheet)
                 }
             Logger.log("Character load complete")
             characterLoaded = LoadStatus.LOADED
@@ -302,6 +296,16 @@ fun EngineContext.beginCharacterLoad(path: Path, character: AHCharacters = AHCha
             }
             enableCharacterMenu()
         }
+    }
+}
+
+fun EngineContext.sheetToTexture(sheet: SpriteSheet): TextureInstance {
+    return if (sheet.bytesPerPixel == 1) {
+        Logger.logVerbose("Create indexed effect sheet ${sheet.width}x${sheet.height}")
+        loadIndexedImage(sheet.raster, palFile.data, sheet.width, sheet.height)
+    } else {
+        Logger.logVerbose("Create rgba effect sheet ${sheet.width}x${sheet.height}")
+        loadRgbaImage(sheet.raster, sheet.width, sheet.height)
     }
 }
 
@@ -378,6 +382,15 @@ fun buildEffectSheets(tbldata: TblFile, archive: PacFileSystem, character: AHCha
                     DecompressDDS(it)
                 }
             }
+        }
+    }
+}
+
+fun buildArcanaSheets(tbldata: TblFile, archive: PacFileSystem, character: AHCharacters): Map<Int, SpriteSheet> {
+    return tbldata.getSheetIndices().associateWith { index ->
+        archive.openReadOnly(character.getSpriteFile(index)).use { inFile ->
+            val hip = HIPFile(inFile, 0)
+            hip.sheet
         }
     }
 }

@@ -126,11 +126,8 @@ object Context: EngineContext, RenderContext {
             SDL_GetError()?.toKString()?.let {
                 Logger.log(it)
             }
-        } else {
-            Logger.logVerbose("Created RGB surface")
         }
         val paletteBuffer = allocArray<SDL_Color>(256)
-        Logger.logVerbose("Allocated palette buffer")
         //palette.toCValues().place(interpretCPointer(paletteBuffer.rawValue)!!)
         for(n in 0 until 256) {
             paletteBuffer[n].r = palette[n*4+2]
@@ -138,7 +135,6 @@ object Context: EngineContext, RenderContext {
             paletteBuffer[n].b = palette[n*4+0]
             paletteBuffer[n].a = palette[n*4+3]
         }
-        Logger.logVerbose("Transferred color values")
         val format = newSurface?.pointed?.format
         val palette = format?.pointed?.palette
         var error = SDL_SetPaletteColors(palette, paletteBuffer, 0, 256)
@@ -146,18 +142,13 @@ object Context: EngineContext, RenderContext {
             SDL_GetError()?.toKString()?.let {
                 Logger.log(it)
             }
-        } else {
-            Logger.logVerbose("Palette applied to new surface")
         }
         SDL_memcpy(newSurface?.pointed?.pixels, raster.refTo(0), raster.size.toULong())
-        Logger.logVerbose("Pixel data copied to new surface")
         error = SDL_SetColorKey(newSurface, SDL_TRUE.toInt(), 0u)
         if (error != 0) {
             SDL_GetError()?.toKString()?.let {
                 Logger.log(it)
             }
-        } else {
-            Logger.logVerbose("Color key set")
         }
         return TextureInstance(surfaceToTexture(newSurface))
     }

@@ -61,6 +61,7 @@ class HIPFile(dataFile: FileHandle, offset: Long, destination: SpriteSheet? = nu
             }
             else -> throw IllegalArgumentException("Unknown image type with flags ${flags and 0xFF}")
         }
+        dataSource.close()
     }
 
     private fun load256(

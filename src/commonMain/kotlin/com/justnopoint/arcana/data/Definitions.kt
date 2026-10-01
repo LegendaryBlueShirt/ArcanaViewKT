@@ -14,8 +14,8 @@ val DIR_EF_PAL = "5_rgb_pal"
 
 enum class AHCharacters(
     val displayName: String,
-    val subfolder: String = "chara",
-    val index: Int) {
+    val index: Int,
+    val isArcana: Boolean = false) {
     HEART(displayName = "Heart Aino", index = 0),
     SAKI(displayName = "Saku Tsuzura", index = 1),
     KAMUI(displayName = "Kamui Tokinomiya", index = 2),
@@ -43,7 +43,32 @@ enum class AHCharacters(
     RAGNAROK(displayName = "Ragnarok", index = 27),
     MINORI(displayName = "Minori Amanohara", index = 28),
     PISTRIX(displayName = "Pistrix", index = 29),
-    DHEART(displayName = "Dark Heart", index = 30)
+    DHEART(displayName = "Dark Heart", index = 30),
+    LOVE(displayName = "Love - Partinias", index = 0, isArcana = true),
+    LIGHTNING(displayName = "Lightning - Bhanri", index = 1, isArcana = true),
+    TIME(displayName = "Time - Anutpuda", index = 2, isArcana = true),
+    WOOD(displayName = "Plant - Moriomoto", index = 3, isArcana = true),
+    EARTH(displayName = "Earth - Ohtsuchi", index = 4, isArcana = true),
+    FIRE(displayName = "Fire - Lang-Gong", index = 5, isArcana = true),
+    WIND(displayName = "Wind - Tempestas", index = 6, isArcana = true),
+    DARK(displayName = "Dark - Gier", index = 7, isArcana = true),
+    EVIL(displayName = "Evil - Dieu Mort", index = 8, isArcana = true),
+    WATER(displayName = "Water - Niptra", index = 9, isArcana = true),
+    GOLD(displayName = "Metal - Oreichalkos", index = 10, isArcana = true),
+    SACRED(displayName = "Sacred - Zillael", index = 12, isArcana = true),
+    ICE(displayName = "Ice - Almacia", index = 13, isArcana = true),
+    HALO(displayName = "Light - Mildred", index = 14, isArcana = true),
+    PUNISH(displayName = "Punishment - Koshmar", index = 15, isArcana = true),
+    CRIME(displayName = "Sin - Sorwat", index = 16, isArcana = true),
+    MAGNET(displayName = "Magnetism - Medein", index = 17, isArcana = true),
+    MIRROR(displayName = "Mirror - Heliogabalus", index = 18, isArcana = true),
+    TONE(displayName = "Tone - Phenex", index = 20, isArcana = true),
+    BLOSSOM(displayName = "Flower - Kayatsuhime", index = 21, isArcana = true),
+    FENRIR(displayName = "Fenrir - Baldur", index = 23, isArcana = true),
+    LUCK(displayName = "Luck - Saligrama", index = 24, isArcana = true),
+    TYR(displayName = "Tyr - Gottfried", index = 25, isArcana = true),
+    BLOOD(displayName = "Blood", index = 28, isArcana = true),
+    LIFE(displayName = "Life - Parace L'sia", index = 29, isArcana = true)
 }
 
 fun AHCharacters.indexHex(): String {
@@ -51,15 +76,27 @@ fun AHCharacters.indexHex(): String {
 }
 
 fun AHCharacters.getDataFile(): String {
-    return "$subfolder/act_${indexHex()}.pk3"
+    return if(isArcana) {
+        "tenshi/act_${indexHex()}.pk3"
+    } else {
+        "chara/act_${indexHex()}.pk3"
+    }
 }
 
 fun AHCharacters.getPacFile(): String {
-    return "$subfolder/chara_split_${indexHex()}.pac"
+    return if(isArcana) {
+        "tenshi/tenshi_${indexHex()}.pac"
+    } else {
+        "chara/chara_split_${indexHex()}.pac"
+    }
 }
 
 fun AHCharacters.getEffectFile(): String {
-    return "${subfolder}_effect/chara${indexHex()}e.pac"
+    return if(isArcana) {
+        "tenshi_effect/tenshi${indexHex()}e.pac"
+    } else {
+        "chara_effect/chara${indexHex()}e.pac"
+    }
 }
 
 fun AHCharacters.getSpriteFile(index: Int): Path {
@@ -79,11 +116,19 @@ fun AHCharacters.getEffectSheet(index: Int): Path {
 }
 
 fun AHCharacters.getTblFilePath(): Path {
-    return "/".toPath().div(DIR_TBL).div("chara_${indexHex()}.tbl")
+    return if(isArcana) {
+        "/".toPath().div(DIR_TBL).div("tenshi_${indexHex()}.tbl")
+    } else {
+        "/".toPath().div(DIR_TBL).div("chara_${indexHex()}.tbl")
+    }
 }
 
 fun AHCharacters.getEffectTblFilePath(): Path {
-    return "/".toPath().div(DIR_EF_TBL).div("chara_${indexHex()}e.tbl")
+    return if(isArcana) {
+        "/".toPath().div(DIR_EF_TBL).div("tenshi_${indexHex()}e.tbl")
+    } else {
+        "/".toPath().div(DIR_EF_TBL).div("chara_${indexHex()}e.tbl")
+    }
 }
 
 fun AHCharacters.getPalFilePath(color: Int, group: Int = 0): Path {

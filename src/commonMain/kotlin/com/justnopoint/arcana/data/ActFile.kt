@@ -85,7 +85,7 @@ class ActFile(
     fun getFrameForTime(anim: List<Int>, time: Int): Int {
         val duration = getSequenceDurationTotal(anim)
         if (duration == 0) return -1
-        var currentTime = duration
+        var currentTime = time%duration
         var framenum = -1
         anim.forEach { frameIndex ->
             val frame = getFrameDef(frameIndex)

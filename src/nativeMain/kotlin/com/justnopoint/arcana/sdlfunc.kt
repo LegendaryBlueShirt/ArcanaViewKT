@@ -36,10 +36,6 @@ object Context: EngineContext, RenderContext {
     private var nextFrame = TimeSource.Monotonic.markNow()
     private var frameCounter: Int = 0
     private var exiting = false
-    private var selectedFolder: String? = null
-    private var selectedCharacter: Int? = null
-    private var selectedAnimation: Int? = null
-    private var selectedBoxType: AHBox.BoxType? = null
 
     private var subBlendMode: SDL_BlendMode = 0u
     private fun createSubBlendMode() {
@@ -66,6 +62,26 @@ object Context: EngineContext, RenderContext {
         keyCallback = callback
     }
 
+    private var animationSelectedCallback: ((Int) -> Unit)? = null
+    override fun setAnimationSelectedCallback(callback: (Int) -> Unit) {
+        animationSelectedCallback = callback
+    }
+
+    private var folderSelectedCallback: ((String) -> Unit)? = null
+    override fun setFolderSelectedCallback(callback: (String) -> Unit) {
+        folderSelectedCallback = callback
+    }
+
+    private var characterSelectedCallback: ((Int) -> Unit)? = null
+    override fun setCharacterSelectedCallback(callback: (Int) -> Unit) {
+        characterSelectedCallback = callback
+    }
+
+    private var boxTypeSelectedCallback: ((AHBox.BoxType) -> Unit)? = null
+    override fun setBoxtypeSelectedCallback(callback: (AHBox.BoxType) -> Unit) {
+        boxTypeSelectedCallback = callback
+    }
+
     override fun processInput() {
         while (SDL_PollEvent(event.ptr) != 0) {
             when (event.type) {
@@ -89,21 +105,25 @@ object Context: EngineContext, RenderContext {
                             when(val command = winmsg.wParam.toInt()) {
                                 MENU_QUIT -> exiting = true
                                 MENU_OPEN -> {
-                                    selectedFolder = showFolderChooser()
+                                    showFolderChooser()?.let {
+                                        folderSelectedCallback?.invoke(it)
+                                    }
                                 }
                                 else -> {
                                     if((command and MENU_CHARACTER) == MENU_CHARACTER) {
-                                        selectedCharacter = command xor MENU_CHARACTER
+                                        characterSelectedCallback?.invoke(command xor MENU_CHARACTER)
                                     } else if(command and MENU_ANIMATION == MENU_ANIMATION) {
-                                        selectedAnimation = command xor MENU_ANIMATION
+                                        animationSelectedCallback?.invoke(command xor MENU_ANIMATION)
                                     } else if(command and MENU_BOXES == MENU_BOXES) {
                                         val boxTypeId = command xor MENU_BOXES
-                                        selectedBoxType = boxMapping.firstNotNullOfOrNull {
+                                        boxMapping.firstNotNullOfOrNull {
                                             if(it.value == boxTypeId) {
                                                 it.key
                                             } else {
                                                 null
                                             }
+                                        } ?.let { boxType ->
+                                            boxTypeSelectedCallback?.invoke(boxType)
                                         }
                                     }
                                 }
@@ -285,30 +305,6 @@ object Context: EngineContext, RenderContext {
         val r = (color and 0xFF)
         SDL_SetRenderDrawColor(renderer, r.toUByte(), g.toUByte(), b.toUByte(), a.toUByte())
         SDL_RenderDrawRect(renderer, dstRect.ptr)
-    }
-
-    override fun folderSelected(): String? {
-        val returnval = selectedFolder
-        selectedFolder = null
-        return returnval
-    }
-
-    override fun characterSelected(): Int? {
-        val returnval = selectedCharacter
-        selectedCharacter = null
-        return returnval
-    }
-
-    override fun animationSelected(): Int? {
-        val returnval = selectedAnimation
-        selectedAnimation = null
-        return returnval
-    }
-
-    override fun boxtypeSelected(): AHBox.BoxType? {
-        val returnval = selectedBoxType
-        selectedBoxType = null
-        return returnval
     }
 
     override fun <T> performRender(renderFunction: RenderContext.() -> T) {

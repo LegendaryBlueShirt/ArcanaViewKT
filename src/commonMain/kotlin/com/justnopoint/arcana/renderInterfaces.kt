@@ -32,10 +32,10 @@ sealed class RenderMode {
 interface EngineContext {
     fun isExiting(): Boolean
     fun setKeyCallback(callback: (Keys) -> Unit)
-    fun folderSelected(): String?
-    fun characterSelected(): Int?
-    fun animationSelected(): Int?
-    fun boxtypeSelected(): AHBox.BoxType?
+    fun setFolderSelectedCallback(callback: (String) -> Unit)
+    fun setCharacterSelectedCallback(callback: (Int) -> Unit)
+    fun setAnimationSelectedCallback(callback: (Int) -> Unit)
+    fun setBoxtypeSelectedCallback(callback: (AHBox.BoxType) -> Unit)
     fun currentFrame(): Int
     fun loadRgbaImage(raster: ByteArray, width: Int, height: Int): TextureInstance
     fun loadIndexedImage(raster: ByteArray, palette: UByteArray, width: Int, height: Int): TextureInstance

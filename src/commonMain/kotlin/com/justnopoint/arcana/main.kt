@@ -78,11 +78,11 @@ fun main(args: Array<String>) {
     val verbose by parser.option(ArgType.Boolean, shortName = "v", description = "verbose mode")
     parser.parse(args)
     Logger.init(verbose == true)
-//    setUnhandledExceptionHook { throwable ->
-//        Logger.log("Uncaught exception - ${throwable.message}")
-//        Logger.close()
-//        terminateWithUnhandledException(throwable)
-//    }
+    setUnhandledExceptionHook { throwable ->
+        Logger.log("Uncaught exception - ${throwable.message}")
+        Logger.close()
+        terminateWithUnhandledException(throwable)
+    }
     initChooser()
     engineContext("Arcana Heart Frameviewer") {
         var currentAnim = 0
@@ -113,38 +113,42 @@ fun main(args: Array<String>) {
             }
         }
 
+        setAnimationSelectedCallback { anim ->
+            currentAnim = anim
+            frameIndex = 0
+        }
+
+        setFolderSelectedCallback { folder ->
+            currentPath = folder.toPath()
+            beginCharacterLoad(currentPath)
+            frameIndex = 0
+        }
+
+        setCharacterSelectedCallback { character ->
+            val characterSelection = AHCharacters.entries[character]
+            beginCharacterLoad(currentPath, characterSelection)
+            frameIndex = 0
+        }
+
+        setBoxtypeSelectedCallback { boxType ->
+            val currentValue = boxes.getOrElse(boxType) { false }
+            boxes[boxType] = !currentValue
+            setBoxChecks(boxes)
+        }
+
         while(!isExiting()) {
             processInput()
-            folderSelected()?.let {
-                currentPath = it.toPath()
-                beginCharacterLoad(currentPath)
-                currentAnim = 0
-                frameIndex = 0
-            }
-            characterSelected()?.let {
-                val characterSelection = AHCharacters.entries[it]
-                beginCharacterLoad(currentPath, characterSelection)
-                currentAnim = 0
-                frameIndex = 0
-            }
-
-            boxtypeSelected()?.let {
-                val currentValue = boxes.getOrElse(it) { false }
-                boxes[it] = !currentValue
-                setBoxChecks(boxes)
-            }
-
-            animationSelected()?.let {
-                currentAnim = it
-                frameIndex = 0
-            }
 
             if(characterLoaded == LoadStatus.LOADED || characterLoaded == LoadStatus.PARTIAL) {
                 performRender {
+                    if (!actFile.getValidAnims().contains(currentAnim)) {
+                        currentAnim = actFile.getValidAnims().first()
+                    }
                     val anim = actFile.getAnimDef(currentAnim)
                     if(animating) {
                         frameIndex = actFile.getFrameForTime(anim, currentFrame())
                     }
+                    if(frameIndex < 0) return@performRender
                     val frame = actFile.getFrameDef(anim[frameIndex])
                     showText(frame.frameData.toHexString(), 10, 548)
                     showText(frame.frameData2.toHexString(), 10, 564)
